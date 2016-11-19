@@ -30,9 +30,54 @@
 
 #include "MK64F12.h"
 
-uint8_t uart_getchar ();
-void put(char *ptr_str);
-void uart_putchar (char ch);
+
+uint8_t uart_getchar ()
+{
+/* Wait until character has been received */
+while (!(UART2_S1 & UART_S1_RDRF_MASK));
+/* Return the 8-bit data from the receiver */
+return UART2_D;
+}
+
+void uart_putchar (char ch)
+{
+/* Wait until space is available in the FIFO */
+while(!(UART2_S1 & UART_S1_TDRE_MASK));
+/* Send the character */
+UART2_D = (uint8_t)ch;
+}
+
+void put(char *ptr_str)
+{
+	while(*ptr_str)
+		uart_putchar(*ptr_str++);
+
+}
+
+
+void UART2_IRQHandler(void)
+{
+	DelayFunction();
+	put("interruptedxxx");
+
+	PORTD_ISFR = PORT_ISFR_ISF(0x00000004);
+}
+
+void PORTD_IRQHandler(void)
+{
+	DelayFunction();
+	put("interrupted");
+
+	PORTD_ISFR = PORT_ISFR_ISF(0x00000004);		/* Clear interrupt status flag */
+
+}
+
+void DelayFunction(void)
+{
+	int cnt;
+	for(cnt=0; cnt<100000; cnt++){}
+
+}
 
 int main(void)
 {
@@ -40,53 +85,42 @@ int main(void)
 	uint16_t ubd;					/*Variable to save the baud rate*/
 	uint8_t temp;
 
-	SIM_SCGC4 |= SIM_SCGC4_UART3_MASK;      /*Enable the UART clock*/
-	SIM_SCGC5 |= SIM_SCGC5_PORTC_MASK;		/*Enable the PORTB clock*/
-	PORTC_PCR16 |= PORT_PCR_MUX(3);
-	PORTC_PCR17 |= PORT_PCR_MUX(3);
+	SIM_SCGC4 |= SIM_SCGC4_UART2_MASK;      /*Enable the UART clock*/
+	SIM_SCGC5 |= SIM_SCGC5_PORTD_MASK;		/*Enable the PORTB clock*/
+	PORTD_PCR2 |= PORT_PCR_MUX(3)|PORT_PCR_ISF(0)|PORT_PCR_IRQC(10);//|PORT_PCR_ISF(0);			//this is the RX
+	PORTD_PCR3 |= PORT_PCR_MUX(3)|PORT_PCR_ISF(0);
 
-	UART3_C2 &= ~(UART_C2_TE_MASK | UART_C2_RE_MASK );  /*Disable Tx and Rx*/
-	UART3_C1 = 0; 		/*Dafault settings of the register*/
+	UART2_C2 &= ~(UART_C2_TE_MASK | UART_C2_RE_MASK );  /*Disable Tx and Rx*/
+	UART2_C1 = 0; 		/*Dafault settings of the register*/
 
 	ubd = (uint16_t)((21000*1000)/(9600 * 16));  /* Calculate baud settings */
 
-	temp = UART3_BDH & ~(UART_BDH_SBR(0x1F));   /*Save the value of UART0_BDH except SBR*/
-	UART3_BDH = temp | (((ubd & 0x1F00) >> 8));
-	UART3_BDL = (uint8_t)(ubd & UART_BDL_SBR_MASK);
+	temp = UART2_BDH & ~(UART_BDH_SBR(0x1F));   /*Save the value of UART0_BDH except SBR*/
+	UART2_BDH = temp | (((ubd & 0x1F00) >> 8));
+	UART2_BDL = (uint8_t)(ubd & UART_BDL_SBR_MASK);
 
-	UART3_C2 |= (UART_C2_TE_MASK | UART_C2_RE_MASK );    /* Enable receiver and transmitter */
+	UART2_C2 |= (UART_C2_TE_MASK | UART_C2_RE_MASK);    /* Enable receiver and transmitter */
 
 	uint8_t ch;
+
+	//PORTD_PCR2  = 0x80300; 		/*PORTD_PCR6: ISF=0,IRQC=8,MUX=1 */
+	PORTD_ISFR = PORT_ISFR_ISF(0x00000004); 	  /* Clear interrupt status flag */
+	//NVIC_EnableIRQ(UART2_RX_TX_IRQn);
+	NVIC_EnableIRQ(PORTD_IRQn);
+	//////////////////////////////////////////
+	//ISR
+
+	/////////////////////////////////////////
 
 		put("\r\nSerial code example\r\n");    /*Print the text*/
 
 		while(1)
 		{
-			//ch = uart_getchar();
-			uart_putchar("x");
-			//BLUE_TOGGLE;
+			put("\r\nSerial yolo\r\n");
+			for(int i = 0 ; i< 1000 ; i++){}
 		}
 	    return 0;
+
 }
 
-uint8_t uart_getchar ()
-{
-/* Wait until character has been received */
-while (!(UART3_S1 & UART_S1_RDRF_MASK));
-/* Return the 8-bit data from the receiver */
-return UART3_D;
-}
 
-void uart_putchar (char ch)
-{
-/* Wait until space is available in the FIFO */
-while(!(UART3_S1 & UART_S1_TDRE_MASK));
-/* Send the character */
-UART3_D = (uint8_t)ch;
-}
-
-void put(char *ptr_str)
-{
-	while(*ptr_str)
-		uart_putchar(*ptr_str++);
-}
